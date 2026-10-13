@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="1" author="student">
+        <createTable tableName="courses">
+            <column name="id" type="BIGINT" autoIncrement="true">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="name" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="description" type="TEXT"/>
+            <column name="created_time" type="TIMESTAMP"/>
+            <column name="updated_time" type="TIMESTAMP"/>
+        </createTable>
+
+        <createTable tableName="chapters">
+            <column name="id" type="BIGINT" autoIncrement="true">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="name" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="description" type="TEXT"/>
+            <column name="chapter_order" type="INT"/>
+            <column name="course_id" type="BIGINT">
+                <constraints nullable="false" foreignKeyName="fk_chapters_course" references="courses(id)"/>
+            </column>
+            <column name="created_time" type="TIMESTAMP"/>
+            <column name="updated_time" type="TIMESTAMP"/>
+        </createTable>
+
+        <createTable tableName="lessons">
+            <column name="id" type="BIGINT" autoIncrement="true">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="name" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="description" type="TEXT"/>
+            <column name="content" type="TEXT"/>
+            <column name="lesson_order" type="INT"/>
+            <column name="chapter_id" type="BIGINT">
+                <constraints nullable="false" foreignKeyName="fk_lessons_chapter" references="chapters(id)"/>
+            </column>
+            <column name="created_time" type="TIMESTAMP"/>
+            <column name="updated_time" type="TIMESTAMP"/>
+        </createTable>
+    </changeSet>
+
+    <changeSet id="2" author="student">
+        <insert tableName="courses">
+            <column name="id" valueNumeric="1"/>
+            <column name="name" value="Java Developer"/>
+            <column name="description" value="Basic Java course for beginners."/>
+            <column name="created_time" valueDate="NOW()"/>
+            <column name="updated_time" valueDate="NOW()"/>
+        </insert>
+
+        <insert tableName="chapters">
+            <column name="id" valueNumeric="1"/>
+            <column name="name" value="if-else conditions"/>
+            <column name="description" value="Chapter about conditional operators."/>
+            <column name="chapter_order" valueNumeric="1"/>
+            <column name="course_id" valueNumeric="1"/>
+            <column name="created_time" valueDate="NOW()"/>
+            <column name="updated_time" valueDate="NOW()"/>
+        </insert>
+
+        <insert tableName="lessons">
+            <column name="id" valueNumeric="1"/>
+            <column name="name" value="Lecture for if-else conditions"/>
+            <column name="description" value="Basic concept of conditional statements in Java."/>
+            <column name="content" value="In Java, conditional statements allow you to control the flow of execution based on boolean expressions."/>
+            <column name="lesson_order" valueNumeric="1"/>
+            <column name="chapter_id" valueNumeric="1"/>
+            <column name="created_time" valueDate="NOW()"/>
+            <column name="updated_time" valueDate="NOW()"/>
+        </insert>
+    </changeSet>
+
+</databaseChangeLog>
