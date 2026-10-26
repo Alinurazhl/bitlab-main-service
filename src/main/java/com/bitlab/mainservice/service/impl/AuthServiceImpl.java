@@ -3,6 +3,7 @@ package com.bitlab.mainservice.service.impl;
 import com.bitlab.mainservice.dto.LoginRequest;
 import com.bitlab.mainservice.dto.RefreshTokenRequest;
 import com.bitlab.mainservice.dto.JwtResponse;
+import com.bitlab.mainservice.dto.UserRegistrationDto;
 import com.bitlab.mainservice.service.AuthService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -11,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
+import java.util.List;
 import java.util.Map;
 
 @Service
@@ -98,5 +100,67 @@ public class AuthServiceImpl implements AuthService {
         }
 
         throw new IllegalArgumentException("Не удалось обновить токен");
+    }
+
+    @Override
+    public void registerUser(UserRegistrationDto registrationDto) {
+        log.info("Admin is creating a new user: {}", registrationDto.getUsername());
+
+        // 1. Получаем технический токен администратора для работы с Admin API Keycloak
+        String tokenUrl = "http://keycloak:8080/realms/master/protocol/openid-connect/token";
+        HttpHeaders tokenHeaders = new HttpHeaders();
+        tokenHeaders.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+
+        MultiValueMap<String, String> tokenBody = new LinkedMultiValueMap<>();
+        tokenBody.add("grant_type", "password");
+        tokenBody.add("client_id", "admin-cli");
+        tokenBody.add("username", "admin"); // Данные админа из нашего docker-compose
+        tokenBody.add("password", "admin");
+
+        HttpEntity<MultiValueMap<String, String>> tokenRequest = new HttpEntity<>(tokenBody, tokenHeaders);
+        String adminToken;
+        try {
+            @SuppressWarnings("unchecked")
+            ResponseEntity<Map> tokenResponse = restTemplate.postForEntity(tokenUrl, tokenRequest, Map.class);
+            adminToken = (String) tokenResponse.getBody().get("access_token");
+        } catch (Exception e) {
+            log.error("Failed to obtain Keycloak admin token: {}", e.getMessage());
+            throw new IllegalStateException("Ошибка авторизации администратора в Keycloak");
+        }
+
+        // 2. Отправляем запрос на создание пользователя в Keycloak
+        String usersUrl = "http://keycloak:8080/admin/realms/master/users";
+        HttpHeaders userHeaders = new HttpHeaders();
+        userHeaders.setContentType(MediaType.APPLICATION_JSON);
+        userHeaders.setBearerAuth(adminToken);
+
+        // Формируем JSON-тело для Keycloak Admin API
+        Map<String, Object> credential = Map.of(
+                "type", "password",
+                "value", registrationDto.getPassword(),
+                "temporary", false
+        );
+
+        Map<String, Object> keycloakUser = Map.of(
+                "username", registrationDto.getUsername(),
+                "email", registrationDto.getEmail(),
+                "firstName", registrationDto.getFirstName(),
+                "lastName", registrationDto.getLastName(),
+                "enabled", true,
+                "credentials", List.of(credential)
+        );
+
+        HttpEntity<Map<String, Object>> userRequest = new HttpEntity<>(keycloakUser, userHeaders);
+
+        try {
+            ResponseEntity<Void> userResponse = restTemplate.postForEntity(usersUrl, userRequest, Void.class);
+            if (userResponse.getStatusCode() != HttpStatus.CREATED) {
+                throw new IllegalArgumentException("Не удалось создать пользователя в Keycloak");
+            }
+            log.info("User {} successfully registered in Keycloak", registrationDto.getUsername());
+        } catch (Exception e) {
+            log.error("User registration failed: {}", e.getMessage());
+            throw new IllegalArgumentException("Пользователь с таким логином или email уже существует");
+        }
     }
 }
