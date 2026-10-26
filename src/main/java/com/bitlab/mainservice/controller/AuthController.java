@@ -1,5 +1,6 @@
 package com.bitlab.mainservice.controller;
 
+import com.bitlab.mainservice.dto.RefreshTokenRequest;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import com.bitlab.mainservice.dto.LoginRequest;
@@ -22,4 +23,10 @@ public class AuthController {
     public ResponseEntity<JwtResponse> login(@RequestBody LoginRequest loginRequest) {
         return ResponseEntity.ok(authService.login(loginRequest));
     }
+    @PostMapping("/refresh")
+    @Operation(summary = "Обновить JWT токен с помощью Refresh токена")
+    public ResponseEntity<JwtResponse> refreshToken(@RequestBody RefreshTokenRequest refreshTokenRequest) {
+        return ResponseEntity.ok(authService.refreshToken(refreshTokenRequest));
+    }
+
 }

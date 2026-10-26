@@ -1,6 +1,7 @@
 package com.bitlab.mainservice.service.impl;
 
 import com.bitlab.mainservice.dto.LoginRequest;
+import com.bitlab.mainservice.dto.RefreshTokenRequest;
 import com.bitlab.mainservice.dto.JwtResponse;
 import com.bitlab.mainservice.service.AuthService;
 import lombok.RequiredArgsConstructor;
@@ -58,5 +59,44 @@ public class AuthServiceImpl implements AuthService {
         }
 
         throw new IllegalArgumentException("Не удалось получить токены от сервера авторизации");
+    }
+
+    @Override
+    public JwtResponse refreshToken(RefreshTokenRequest refreshTokenRequest) {
+        log.info("Processing refresh token request");
+
+        String keycloakUrl = "http://keycloak:8080/realms/master/protocol/openid-connect/token";
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+
+        // intensity.Формируем параметры для OAuth2 Refresh Token Grant
+        MultiValueMap<String, String> bodyMap = new LinkedMultiValueMap<>();
+        bodyMap.add("grant_type", "refresh_token");
+        bodyMap.add("client_id", "admin-cli");
+        bodyMap.add("refresh_token", refreshTokenRequest.getRefreshToken());
+
+        HttpEntity<MultiValueMap<String, String>> entity = new HttpEntity<>(bodyMap, headers);
+
+        try {
+            @SuppressWarnings("unchecked")
+            ResponseEntity<Map> response = restTemplate.postForEntity(keycloakUrl, entity, Map.class);
+            Map<String, Object> responseBody = response.getBody();
+
+            if (responseBody != null) {
+                return new JwtResponse(
+                        (String) responseBody.get("access_token"),
+                        (String) responseBody.get("refresh_token"),
+                        ((Number) responseBody.get("expires_in")).longValue(),
+                        ((Number) responseBody.get("refresh_expires_in")).longValue(),
+                        (String) responseBody.get("token_type")
+                );
+            }
+        } catch (Exception e) {
+            log.error("Refresh token failed: {}", e.getMessage());
+            throw new IllegalArgumentException("Невалидный или истекший Refresh Token");
+        }
+
+        throw new IllegalArgumentException("Не удалось обновить токен");
     }
 }

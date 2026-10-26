@@ -54,4 +54,18 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.accessToken").value("access_secret"))
                 .andExpect(jsonPath("$.tokenType").value("Bearer"));
     }
+    @Test
+    @DisplayName("POST /api/v1/auth/refresh должен обновлять JWT и возвращать 200 OK")
+    void refreshToken_ShouldReturnNewTokensAnd200OK() throws Exception {
+        com.bitlab.mainservice.dto.RefreshTokenRequest refreshRequest = new com.bitlab.mainservice.dto.RefreshTokenRequest("old_refresh_secret");
+        when(authService.refreshToken(any(com.bitlab.mainservice.dto.RefreshTokenRequest.class))).thenReturn(jwtResponse);
+
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(refreshRequest)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").value("access_secret"))
+                .andExpect(jsonPath("$.refreshToken").value("refresh_secret"));
+    }
+
 }
