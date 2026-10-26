@@ -16,6 +16,7 @@ import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -48,7 +49,7 @@ class LessonControllerTest {
     void getLessonsByChapterId_ShouldReturn200OK() throws Exception {
         when(lessonService.getLessonsByChapterId(5L)).thenReturn(List.of(lessonDto));
 
-        mockMvc.perform(get("/api/v1/lessons/chapter/5"))
+        mockMvc.perform(get("/api/v1/lessons/chapter/5").with(jwt()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].name").value("Spring Boot Intro"));
     }
@@ -58,7 +59,7 @@ class LessonControllerTest {
     void getLessonById_ShouldReturn200OK() throws Exception {
         when(lessonService.getLessonById(1L)).thenReturn(lessonDto);
 
-        mockMvc.perform(get("/api/v1/lessons/1"))
+        mockMvc.perform(get("/api/v1/lessons/1").with(jwt()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(1))
                 .andExpect(jsonPath("$.name").value("Spring Boot Intro"));
@@ -69,7 +70,7 @@ class LessonControllerTest {
     void createLesson_ShouldReturn201Created() throws Exception {
         when(lessonService.createLesson(any(LessonDto.class))).thenReturn(lessonDto);
 
-        mockMvc.perform(post("/api/v1/lessons")
+        mockMvc.perform(post("/api/v1/lessons").with(jwt())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(lessonDto)))
                 .andExpect(status().isCreated())
@@ -79,7 +80,7 @@ class LessonControllerTest {
     @Test
     @DisplayName("DELETE /api/v1/lessons/{id} должен возвращать 204 No Content")
     void deleteLesson_ShouldReturn204NoContent() throws Exception {
-        mockMvc.perform(delete("/api/v1/lessons/1"))
+        mockMvc.perform(delete("/api/v1/lessons/1").with(jwt()))
                 .andExpect(status().isNoContent());
     }
 }

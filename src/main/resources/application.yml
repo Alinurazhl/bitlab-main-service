@@ -4,6 +4,13 @@ server:
 spring:
   application:
     name: main-service
+    security:
+      oauth2:
+        resourceserver:
+          jwt:
+            issuer-uri: http://keycloak:8080/realms/master
+            jwk-set-uri: http://localhost:8082/realms/master/protocol/openid-connect/certs
+
 
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5433/lms_main_db}
