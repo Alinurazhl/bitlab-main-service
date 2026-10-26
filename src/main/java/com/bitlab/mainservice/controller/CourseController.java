@@ -10,14 +10,17 @@ import com.bitlab.mainservice.service.CourseService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;import java.util.List;
+import org.springframework.web.bind.annotation.*;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/courses")
 @RequiredArgsConstructor
 @Tag(name = "Course Controller", description = "Управление курсами LMS системы")
 public class CourseController {
+
     private final CourseService courseService;
+
     @GetMapping
     @Operation(summary = "Получить список всех курсов", description = "Возвращает массив всех доступных курсов")
     @ApiResponse(responseCode = "200", description = "Список курсов успешно получен")

@@ -9,24 +9,33 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import java.util.List;
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.*;import static org.mockito.ArgumentMatchers.anyList;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class CourseServiceImplTest {
+
     @Mock
     private CourseRepository courseRepository;
+
     @Mock
     private CourseMapper courseMapper;
+
     @InjectMocks
     private CourseServiceImpl courseService;
+
     private Course course;
     private CourseDto courseDto;
 
@@ -39,14 +48,17 @@ class CourseServiceImplTest {
     @Test
     @DisplayName("Должен возвращать список всех курсов")
     void getAllCourses_ShouldReturnListOfCourseDto() {
-        when(courseRepository.findAll()).thenReturn(List.of(course));
+        Page<Course> coursePage = new PageImpl<>(List.of(course));
+
+        when(courseRepository.findAll(any(Pageable.class))).thenReturn(coursePage);
         when(courseMapper.toDtoList(anyList())).thenReturn(List.of(courseDto));
+
         List<CourseDto> result = courseService.getAllCourses();
 
         assertNotNull(result);
         assertEquals(1, result.size());
         assertEquals("Java Developer", result.get(0).getName());
-        verify(courseRepository, times(1)).findAll();
+        verify(courseRepository, times(1)).findAll(any(Pageable.class));
     }
 
     @Test
@@ -72,17 +84,26 @@ class CourseServiceImplTest {
     }
 
     @Test
-    @DisplayName("Должен успешно создавать курс")
+    @DisplayName("Должен успешно создавать курс и игнорировать переданный клиентом ID")
     void createCourse_ShouldSaveAndReturnCourseDto() {
-        when(courseMapper.toEntity(courseDto)).thenReturn(course);
-        when(courseRepository.save(course)).thenReturn(course);
+        // Создаем локальную сущность, которая имитирует результат маппинга DTO с ID
+        Course mappedCourse = Course.builder().id(55L).name("Java Developer").description("Course description").build();
+
+        when(courseMapper.toEntity(courseDto)).thenReturn(mappedCourse);
+        when(courseRepository.save(any(Course.class))).thenReturn(course);
         when(courseMapper.toDto(course)).thenReturn(courseDto);
+
+        // Перехватываем объект, который реально уйдет в метод save() репозитория
+        ArgumentCaptor<Course> courseCaptor = ArgumentCaptor.forClass(Course.class);
 
         CourseDto result = courseService.createCourse(courseDto);
 
         assertNotNull(result);
         assertEquals("Java Developer", result.getName());
-        verify(courseRepository, times(1)).save(course);
+
+        // Финальная проверка: проверяем, что сервис занулил ID перед сохранением в базу
+        verify(courseRepository, times(1)).save(courseCaptor.capture());
+        assertNull(courseCaptor.getValue().getId(), "ID сущности должен быть занулен перед сохранением!");
     }
 
     @Test
