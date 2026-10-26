@@ -38,5 +38,13 @@ public class AuthController {
         authService.registerUser(registrationDto);
         return ResponseEntity.status(HttpStatus.CREATED).body("Пользователь успешно зарегистрирован");
     }
+    @PutMapping("/profile")
+    @io.swagger.v3.oas.annotations.Operation(summary = "Обновить личные данные и пароль (Доступно всем авторизованным)")
+    public ResponseEntity<String> updateProfile(
+            java.security.Principal principal,
+            @RequestBody com.bitlab.mainservice.dto.UserUpdateDto updateDto) {
+        authService.updateUserProfile(principal.getName(), updateDto);
+        return ResponseEntity.ok("Профиль успешно обновлен");
+    }
 
 }

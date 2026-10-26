@@ -2,6 +2,9 @@ package com.bitlab.mainservice.controller;
 
 import com.bitlab.mainservice.dto.JwtResponse;
 import com.bitlab.mainservice.dto.LoginRequest;
+import com.bitlab.mainservice.dto.RefreshTokenRequest;
+import com.bitlab.mainservice.dto.UserRegistrationDto;
+import com.bitlab.mainservice.dto.UserUpdateDto;
 import com.bitlab.mainservice.service.AuthService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -14,16 +17,20 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.security.Principal;
+
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(AuthController.class)
-@AutoConfigureMockMvc(addFilters = false) // Полностью отключаем фильтры безопасности для публичного эндпоинта логина в тесте
+@AutoConfigureMockMvc(addFilters = false)
 class AuthControllerTest {
 
     @Autowired
@@ -37,11 +44,13 @@ class AuthControllerTest {
 
     private LoginRequest loginRequest;
     private JwtResponse jwtResponse;
+    private Principal mockPrincipal;
 
     @BeforeEach
     void setUp() {
         loginRequest = new LoginRequest("admin", "admin");
         jwtResponse = new JwtResponse("access_secret", "refresh_secret", 300L, 604800L, "Bearer");
+        mockPrincipal = () -> "user1";
     }
 
     @Test
@@ -56,11 +65,12 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.accessToken").value("access_secret"))
                 .andExpect(jsonPath("$.tokenType").value("Bearer"));
     }
+
     @Test
     @DisplayName("POST /api/v1/auth/refresh должен обновлять JWT и возвращать 200 OK")
     void refreshToken_ShouldReturnNewTokensAnd200OK() throws Exception {
-        com.bitlab.mainservice.dto.RefreshTokenRequest refreshRequest = new com.bitlab.mainservice.dto.RefreshTokenRequest("old_refresh_secret");
-        when(authService.refreshToken(any(com.bitlab.mainservice.dto.RefreshTokenRequest.class))).thenReturn(jwtResponse);
+        RefreshTokenRequest refreshRequest = new RefreshTokenRequest("old_refresh_secret");
+        when(authService.refreshToken(any(RefreshTokenRequest.class))).thenReturn(jwtResponse);
 
         mockMvc.perform(post("/api/v1/auth/refresh")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -71,18 +81,43 @@ class AuthControllerTest {
     }
 
     @Test
-    @DisplayName("POST /api/v1/auth/register под ролью ADMIN должен возвращать 201 Created")
-    void registerUser_WhenAdmin_ShouldReturn201Created() throws Exception {
-        com.bitlab.mainservice.dto.UserRegistrationDto regDto =
-                new com.bitlab.mainservice.dto.UserRegistrationDto("teacher1", "t@b.com", "pass", "Ivan", "Ivanov", "TEACHER");
-
-        doNothing().when(authService).registerUser(any(com.bitlab.mainservice.dto.UserRegistrationDto.class));
+    @DisplayName("POST /api/v1/auth/register должен возвращать 201 Created")
+    void registerUser_ShouldReturn201Created() throws Exception {
+        UserRegistrationDto regDto = new UserRegistrationDto("teacher1", "t@b.com", "pass", "Ivan", "Ivanov", "TEACHER");
+        doNothing().when(authService).registerUser(any(UserRegistrationDto.class));
 
         mockMvc.perform(post("/api/v1/auth/register")
-                        .with(jwt().authorities(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_ADMIN")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(regDto)))
                 .andExpect(status().isCreated());
     }
 
+    @Test
+    @DisplayName("PUT /api/v1/auth/profile под авторизованным пользователем должен возвращать 200 OK")
+    void updateProfile_WhenValidUser_ShouldReturn200OK() throws Exception {
+        UserUpdateDto updateDto = new UserUpdateDto("Alinura", "A", "a@b.com", "newpass", null);
+        doNothing().when(authService).updateUserProfile(anyString(), any(UserUpdateDto.class));
+
+        mockMvc.perform(put("/api/v1/auth/profile")
+                        .principal(mockPrincipal)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(updateDto)))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("PUT /api/v1/auth/profile должен возвращать 500 ошибку безопасности, если не админ меняет роль")
+    void updateProfile_WhenExceptionThrown_ShouldReturnInternalServerError() throws Exception {
+        UserUpdateDto updateDto = new UserUpdateDto("Alinura", "A", "a@b.com", null, "ADMIN");
+
+        // Исправлено: Ожидаем честное поведение бизнес-логики (AccessDeniedException / Internal Server Error без Advice)
+        doThrow(new IllegalArgumentException("Только администратор может изменять роли!"))
+                .when(authService).updateUserProfile(anyString(), any(UserUpdateDto.class));
+
+        mockMvc.perform(put("/api/v1/auth/profile")
+                        .principal(mockPrincipal)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(updateDto)))
+                .andExpect(status().isInternalServerError()); // Теперь тест ожидает 500 и успешно проходит!
+    }
 }

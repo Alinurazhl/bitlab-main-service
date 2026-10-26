@@ -4,6 +4,7 @@ import com.bitlab.mainservice.dto.LoginRequest;
 import com.bitlab.mainservice.dto.RefreshTokenRequest;
 import com.bitlab.mainservice.dto.JwtResponse;
 import com.bitlab.mainservice.dto.UserRegistrationDto;
+import com.bitlab.mainservice.dto.UserUpdateDto;
 import com.bitlab.mainservice.service.AuthService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,13 +27,11 @@ public class AuthServiceImpl implements AuthService {
     public JwtResponse login(LoginRequest loginRequest) {
         log.info("Processing login request for user: {}", loginRequest.getUsername());
 
-        // URL токен-эндпоинта внутри сети Docker-Compose
         String keycloakUrl = "http://keycloak:8080/realms/master/protocol/openid-connect/token";
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
 
-        // Стандартные OAuth2 параметры для авторизации в Keycloak
         MultiValueMap<String, String> bodyMap = new LinkedMultiValueMap<>();
         bodyMap.add("grant_type", "password");
         bodyMap.add("client_id", "admin-cli");
@@ -72,7 +71,6 @@ public class AuthServiceImpl implements AuthService {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
 
-        // intensity.Формируем параметры для OAuth2 Refresh Token Grant
         MultiValueMap<String, String> bodyMap = new LinkedMultiValueMap<>();
         bodyMap.add("grant_type", "refresh_token");
         bodyMap.add("client_id", "admin-cli");
@@ -106,7 +104,6 @@ public class AuthServiceImpl implements AuthService {
     public void registerUser(UserRegistrationDto registrationDto) {
         log.info("Admin is creating a new user: {}", registrationDto.getUsername());
 
-        // 1. Получаем технический токен администратора для работы с Admin API Keycloak
         String tokenUrl = "http://keycloak:8080/realms/master/protocol/openid-connect/token";
         HttpHeaders tokenHeaders = new HttpHeaders();
         tokenHeaders.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
@@ -114,7 +111,7 @@ public class AuthServiceImpl implements AuthService {
         MultiValueMap<String, String> tokenBody = new LinkedMultiValueMap<>();
         tokenBody.add("grant_type", "password");
         tokenBody.add("client_id", "admin-cli");
-        tokenBody.add("username", "admin"); // Данные админа из нашего docker-compose
+        tokenBody.add("username", "admin");
         tokenBody.add("password", "admin");
 
         HttpEntity<MultiValueMap<String, String>> tokenRequest = new HttpEntity<>(tokenBody, tokenHeaders);
@@ -128,13 +125,11 @@ public class AuthServiceImpl implements AuthService {
             throw new IllegalStateException("Ошибка авторизации администратора в Keycloak");
         }
 
-        // 2. Отправляем запрос на создание пользователя в Keycloak
         String usersUrl = "http://keycloak:8080/admin/realms/master/users";
         HttpHeaders userHeaders = new HttpHeaders();
         userHeaders.setContentType(MediaType.APPLICATION_JSON);
         userHeaders.setBearerAuth(adminToken);
 
-        // Формируем JSON-тело для Keycloak Admin API
         Map<String, Object> credential = Map.of(
                 "type", "password",
                 "value", registrationDto.getPassword(),
@@ -161,6 +156,94 @@ public class AuthServiceImpl implements AuthService {
         } catch (Exception e) {
             log.error("User registration failed: {}", e.getMessage());
             throw new IllegalArgumentException("Пользователь с таким логином или email уже существует");
+        }
+    }
+
+    @Override
+    public void updateUserProfile(String username, UserUpdateDto updateDto) {
+        log.info("Request to update profile for user: {}", username);
+
+        // 1. Проверяем критическое условие безопасности LT14: только ADMIN может менять роли [INDEX]
+        if (updateDto.getRole() != null && !updateDto.getRole().isBlank()) {
+            org.springframework.security.core.Authentication authentication =
+                    org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+
+            boolean isAdmin = authentication.getAuthorities().stream()
+                    .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+
+            if (!isAdmin) {
+                log.warn("User {} tried to update role without ADMIN permission!", username);
+                throw new org.springframework.security.access.AccessDeniedException("Только администратор может изменять роли пользователей!");
+            }
+        }
+
+        // 2. Получаем технический токен администратора для вызова Admin API Keycloak
+        String tokenUrl = "http://keycloak:8080/realms/master/protocol/openid-connect/token";
+        HttpHeaders tokenHeaders = new HttpHeaders();
+        tokenHeaders.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+
+        MultiValueMap<String, String> tokenBody = new LinkedMultiValueMap<>();
+        tokenBody.add("grant_type", "password");
+        tokenBody.add("client_id", "admin-cli");
+        tokenBody.add("username", "admin");
+        tokenBody.add("password", "admin");
+
+        HttpEntity<MultiValueMap<String, String>> tokenRequest = new HttpEntity<>(tokenBody, tokenHeaders);
+        String adminToken;
+        try {
+            @SuppressWarnings("unchecked")
+            ResponseEntity<Map> tokenResponse = restTemplate.postForEntity(tokenUrl, tokenRequest, Map.class);
+            adminToken = (String) tokenResponse.getBody().get("access_token");
+        } catch (Exception e) {
+            throw new IllegalStateException("Ошибка авторизации администратора в Keycloak");
+        }
+
+        // 3. Ищем внутренний UUID пользователя в Keycloak по его username
+        String searchUrl = "http://keycloak:8080/admin/realms/master/users?username=" + username;
+        HttpHeaders adminHeaders = new HttpHeaders();
+        adminHeaders.setBearerAuth(adminToken);
+        adminHeaders.setContentType(MediaType.APPLICATION_JSON);
+
+        HttpEntity<Void> searchRequest = new HttpEntity<>(adminHeaders);
+        String userId;
+        try {
+            @SuppressWarnings("unchecked")
+            ResponseEntity<List> searchResponse = restTemplate.exchange(searchUrl, HttpMethod.GET, searchRequest, List.class);
+            List<Map<String, Object>> users = searchResponse.getBody();
+            if (users == null || users.isEmpty()) {
+                throw new IllegalArgumentException("Пользователь не найден в Keycloak");
+            }
+            userId = (String) users.get(0).get("id");
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Ошибка поиска пользователя");
+        }
+// 4. Отправляем PUT запрос на обновление профиля в Keycloak
+        String updateUrl = "http://keycloak:8080/admin/realms/master/users/" + userId;
+        Map<String, Object> updateBody = new java.util.HashMap<>();
+        if (updateDto.getFirstName() != null) updateBody.put("firstName", updateDto.getFirstName());
+        if (updateDto.getLastName() != null) updateBody.put("lastName", updateDto.getLastName());
+        if (updateDto.getEmail() != null) updateBody.put("email", updateDto.getEmail());
+        HttpEntity<Map<String, Object>> updateRequest = new HttpEntity<>(updateBody, adminHeaders);
+        try {
+            restTemplate.exchange(updateUrl, HttpMethod.PUT, updateRequest, Void.class);
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Не удалось обновить данные профиля");
+        }
+// 5. Если передан новый пароль — сбрасываем его
+        if (updateDto.getPassword() != null && !updateDto.getPassword().isBlank()) {
+            String passwordUrl = updateUrl + "/reset-password";
+            Map<String, Object> passwordBody = Map.of(
+                    "type", "password",
+                    "value", updateDto.getPassword(),
+                    "temporary", false
+            );
+            HttpEntity<Map<String, Object>> passwordRequest = new HttpEntity<>(passwordBody, adminHeaders);
+            try {
+                restTemplate.exchange(passwordUrl, HttpMethod.PUT, passwordRequest, Void.class);
+                log.info("Password successfully updated for user: {}", username);
+            } catch (Exception e) {
+                throw new IllegalArgumentException("Не удалось обновить пароль пользователя");
+            }
         }
     }
 }
