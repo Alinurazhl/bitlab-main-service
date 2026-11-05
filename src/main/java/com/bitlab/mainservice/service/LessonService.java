@@ -9,4 +9,6 @@ public interface LessonService {
     LessonDto getLessonById(Long id);
     LessonDto createLesson(LessonDto lessonDto);
     void deleteLesson(Long id);
+
+    LessonDto updateLesson(Long id, LessonDto lessonDto);
 }

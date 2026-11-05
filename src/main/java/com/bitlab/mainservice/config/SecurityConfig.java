@@ -24,15 +24,20 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html", "/api/v1/auth/**").permitAll()
 
-                        // Требование LT15: Ограничиваем доступ к /course/** только для ADMIN [INDEX]
+                        // Требование LT15: Ограничиваем доступ к /course/** только для ADMIN
                         .requestMatchers(HttpMethod.POST, "/course/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/course/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/course/**").hasRole("ADMIN")
 
-                        // Требование LT16: Ограничиваем доступ к /chapter/** только для ADMIN [INDEX]
+                        // Требование LT16: Ограничиваем доступ к /chapter/** только для ADMIN
                         .requestMatchers(HttpMethod.POST, "/chapter/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/chapter/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/chapter/**").hasRole("ADMIN")
+
+                        // Требование LT17: Ограничиваем доступ к /lesson/** только для ADMIN
+                        .requestMatchers(HttpMethod.POST, "/lesson/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/lesson/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/lesson/**").hasRole("ADMIN")
 
                         .anyRequest().authenticated()
                 )
