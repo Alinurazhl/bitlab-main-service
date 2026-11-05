@@ -29,6 +29,11 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PUT, "/course/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/course/**").hasRole("ADMIN")
 
+                        // Требование LT16: Ограничиваем доступ к /chapter/** только для ADMIN [INDEX]
+                        .requestMatchers(HttpMethod.POST, "/chapter/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/chapter/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/chapter/**").hasRole("ADMIN")
+
                         .anyRequest().authenticated()
                 )
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> {}));

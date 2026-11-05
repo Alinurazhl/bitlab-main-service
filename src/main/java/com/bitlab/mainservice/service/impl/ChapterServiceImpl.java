@@ -8,15 +8,19 @@ import com.bitlab.mainservice.service.ChapterService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
+@Transactional(readOnly = true) // Оптимизация транзакций для всего класса
 public class ChapterServiceImpl implements ChapterService {
+
     private final ChapterRepository chapterRepository;
     private final ChapterMapper chapterMapper;
+
     @Override
     public List<ChapterDto> getChaptersByCourseId(Long courseId) {
         log.info("Fetching chapters for course id: {}", courseId);
@@ -36,11 +40,16 @@ public class ChapterServiceImpl implements ChapterService {
     }
 
     @Override
+    @Transactional // Атомарность записи сущности
     public ChapterDto createChapter(ChapterDto chapterDto) {
         log.info("Creating new chapter");
         log.debug("Creating chapter object payload: {}", chapterDto);
 
         Chapter chapter = chapterMapper.toEntity(chapterDto);
+
+        // Исправление по замечаниям ментора: игнорируем клиентский ID
+        chapter.setId(null);
+
         Chapter savedChapter = chapterRepository.save(chapter);
 
         log.info("Chapter created successfully with id: {}", savedChapter.getId());
@@ -48,6 +57,26 @@ public class ChapterServiceImpl implements ChapterService {
     }
 
     @Override
+    @Transactional // Реализация недостающего метода по ТЗ LT16
+    public ChapterDto updateChapter(Long id, ChapterDto chapterDto) {
+        log.info("Updating chapter with id: {}", id);
+        log.debug("Update chapter object payload: {}", chapterDto);
+
+        Chapter existingChapter = chapterRepository.findById(id)
+                .orElseThrow(() -> {
+                    log.error("Cannot update. Chapter with id {} not found", id);
+                    return new IllegalArgumentException("Chapter not found with id: " + id);
+                });
+
+        existingChapter.setName(chapterDto.getName());
+        existingChapter.setDescription(chapterDto.getDescription());
+
+        Chapter updatedChapter = chapterRepository.save(existingChapter);
+        return chapterMapper.toDto(updatedChapter);
+    }
+
+    @Override
+    @Transactional // Атомарное безопасное удаление
     public void deleteChapter(Long id) {
         log.info("Deleting chapter with id: {}", id);
         if (!chapterRepository.existsById(id)) {

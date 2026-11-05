@@ -12,4 +12,6 @@ public interface ChapterService {
     ChapterDto createChapter(ChapterDto chapterDto);
 
     void deleteChapter(Long id);
+
+    ChapterDto updateChapter(Long id, ChapterDto chapterDto);
 }
