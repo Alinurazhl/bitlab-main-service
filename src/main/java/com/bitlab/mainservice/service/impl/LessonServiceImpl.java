@@ -20,6 +20,7 @@ public class LessonServiceImpl implements LessonService {
 
     private final LessonRepository lessonRepository;
     private final LessonMapper lessonMapper;
+    private final com.bitlab.mainservice.repository.ChapterRepository chapterRepository;
 
     @Override
     public List<LessonDto> getLessonsByChapterId(Long chapterId) {
@@ -40,21 +41,21 @@ public class LessonServiceImpl implements LessonService {
     }
 
     @Override
-    @Transactional // Изолированная транзакция записи
+    @Transactional
     public LessonDto createLesson(LessonDto lessonDto) {
         log.info("Creating new lesson");
-        log.debug("Creating lesson object payload: {}", lessonDto);
+
+        // Валидация ментора: проверяем, что глава физически существует в БД
+        if (!chapterRepository.existsById(lessonDto.getChapterId())) {
+            throw new IllegalArgumentException("Невозможно создать урок: Глава с ID " + lessonDto.getChapterId() + " не существует!");
+        }
 
         Lesson lesson = lessonMapper.toEntity(lessonDto);
-
-        // Каноны ревью: игнорируем переданный клиентом ID
         lesson.setId(null);
-
         Lesson savedLesson = lessonRepository.save(lesson);
-
-        log.info("Lesson created successfully with id: {}", savedLesson.getId());
         return lessonMapper.toDto(savedLesson);
     }
+
 
     @Override
     @Transactional // Добавленный метод обновления по ТЗ LT17

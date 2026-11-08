@@ -40,19 +40,11 @@ public class ChapterServiceImpl implements ChapterService {
     }
 
     @Override
-    @Transactional // Атомарность записи сущности
+    @Transactional
     public ChapterDto createChapter(ChapterDto chapterDto) {
         log.info("Creating new chapter");
-        log.debug("Creating chapter object payload: {}", chapterDto);
-
         Chapter chapter = chapterMapper.toEntity(chapterDto);
-
-        // Исправление по замечаниям ментора: игнорируем клиентский ID
-        chapter.setId(null);
-
         Chapter savedChapter = chapterRepository.save(chapter);
-
-        log.info("Chapter created successfully with id: {}", savedChapter.getId());
         return chapterMapper.toDto(savedChapter);
     }
 

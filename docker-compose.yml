@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   postgres_db:
     image: postgres:15-alpine
@@ -33,6 +31,35 @@ services:
       postgres_db:
         condition: service_healthy
 
+  minio:
+    # Оригинальный контейнер MinIO через стабильное зеркало [25]
+    image: cr.yandex/mirror/minio/minio:latest
+    container_name: bitlab_minio
+    platform: linux/amd64
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: admin
+    command: server /data --console-address ":9001"
+
+  minio_create_bucket:
+    # Оригинальный клиент автосоздания бакета [25]
+    image: cr.yandex/mirror/minio/mc:latest
+    container_name: bitlab_minio_init
+    platform: linux/amd64
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      sleep 5;
+      /usr/bin/mc alias set myminio http://minio:9000 admin admin;
+      /usr/bin/mc mb myminio/lms-files || true;
+      /usr/bin/mc policy set public myminio/lms-files;
+      exit 0;
+      "
+
   main-service:
     build:
       context: .
@@ -44,6 +71,10 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres_db:5432/lms_main_db
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: postgres
+      MINIO_URL: http://minio:9000
+      MINIO_ACCESS_KEY: admin
+      MINIO_SECRET_KEY: admin
+      MINIO_BUCKET_NAME: lms-files
     depends_on:
-      postgres_db:
-        condition: service_healthy
+      - postgres_db
+      - minio
