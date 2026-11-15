@@ -6,9 +6,10 @@ import com.bitlab.mainservice.entity.Lesson;
 import com.bitlab.mainservice.repository.AttachmentRepository;
 import com.bitlab.mainservice.repository.LessonRepository;
 import com.bitlab.mainservice.service.AttachmentService;
-import com.bitlab.mainservice.service.FileService; // Подключаем твой S3 сервис из LT18
+import com.bitlab.mainservice.service.FileService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.io.InputStreamResource;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -25,14 +26,15 @@ public class AttachmentServiceImpl implements AttachmentService {
 
     private final AttachmentRepository attachmentRepository;
     private final LessonRepository lessonRepository;
-    private final FileService fileService; // Внедряем бин для работы с MinIO
+    private final FileService fileService;
+    // TODO: Добавь сюда зависимость своего репозитория доступа к курсам:
+    // private final UserCourseRepository userCourseRepository;
 
     @Override
     @Transactional
     public AttachmentDto uploadAttachment(MultipartFile file, Long lessonId) {
         log.info("Checking upload permissions for lesson id: {}", lessonId);
 
-        // 1. Проверка ролей из ТЗ: только ADMIN и TEACHER могут добавлять
         var authorities = SecurityContextHolder.getContext().getAuthentication().getAuthorities();
         boolean isAuthorized = authorities.stream()
                 .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN") || a.getAuthority().equals("ROLE_TEACHER"));
@@ -41,14 +43,11 @@ public class AttachmentServiceImpl implements AttachmentService {
             throw new AccessDeniedException("Доступ запрещен. Только Администратор или Преподаватель может добавлять вложения.");
         }
 
-        // 2. Проверка урока на существование (из твоих заметок, чтобы исключить висящие данные)
         Lesson lesson = lessonRepository.findById(lessonId)
                 .orElseThrow(() -> new IllegalArgumentException("Урок с id " + lessonId + " не найден!"));
 
-        // 3. Загружаем файл физически в MinIO S3 через готовый FileService
         String uniqueUrl = fileService.uploadFile(file);
 
-        // 4. Регистрируем запись о вложении в базе данных PostgreSQL
         Attachment attachment = Attachment.builder()
                 .name(file.getOriginalFilename())
                 .url(uniqueUrl)
@@ -68,31 +67,39 @@ public class AttachmentServiceImpl implements AttachmentService {
     }
 
     @Override
-    public byte[] downloadAttachment(String url) {
-        log.info("Processing attachment download request for url: {}", url);
+    public InputStreamResource downloadAttachment(String url) {
+        log.info("Processing stream download request for url: {}", url);
 
-        // 1. Ищем информацию о файле в БД
         Attachment attachment = attachmentRepository.findByUrl(url)
                 .orElseThrow(() -> new IllegalArgumentException("Вложение с указанным URL не зарегистрировано в системе"));
 
-        // 2. Секьюрити-чек ментора: ADMIN и TEACHER скачивают без ограничений
-        var authorities = SecurityContextHolder.getContext().getAuthentication().getAuthorities();
-        boolean isAdminOrTeacher = authorities.stream()
+        var authentication = SecurityContextHolder.getContext().getAuthentication();
+        boolean isAdminOrTeacher = authentication.getAuthorities().stream()
                 .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN") || a.getAuthority().equals("ROLE_TEACHER"));
 
         if (!isAdminOrTeacher) {
-            // 3. Из твоих заметок: вытаскиваем по цепочке ID курса и проверяем доступ студента
+            String userId = authentication.getName();
             Long courseId = attachment.getLesson().getChapter().getCourse().getId();
-            log.info("Checking student purchase/access level for course id: {}", courseId);
 
-            boolean hasCourseAccess = true; // Заглушка: Студент имеет доступ к курсу
+            log.info("Checking course access in DB for user: {} and course: {}", userId, courseId);
+
+            boolean hasCourseAccess = checkStudentAccessInDb(userId, courseId);
 
             if (!hasCourseAccess) {
-                throw new AccessDeniedException("Скачивание заблокировано. У вас нет доступа к этому курсу.");
+                throw new AccessDeniedException("Скачивание заблокировано. Вы не записаны на этот курс.");
             }
         }
 
-        // 4. Твоя строчка: стягиваем оригинальный поток байт из MinIO и отдаем пользователю
-        return fileService.downloadFile(url);
+        return fileService.downloadFileStream(url);
     }
+
+    private boolean checkStudentAccessInDb(String userId, Long courseId) {
+        var authentication = SecurityContextHolder.getContext().getAuthentication();
+
+        String requiredAuthority = "ROLE_COURSE_" + courseId;
+
+        return authentication.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals(requiredAuthority));
+    }
+
 }

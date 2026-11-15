@@ -3,6 +3,8 @@ package com.bitlab.mainservice.controller;
 import com.bitlab.mainservice.dto.AttachmentDto;
 import com.bitlab.mainservice.service.AttachmentService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.InputStreamResource;
+import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -26,11 +28,11 @@ public class AttachmentController {
 
     // Точный эндпоинт по ТЗ: /download
     @GetMapping("/download/{url}")
-    public ResponseEntity<byte[]> download(@PathVariable String url) { // Исправлено: byte[]
-        byte[] data = attachmentService.downloadAttachment(url);
+    public ResponseEntity<Resource> download(@PathVariable String url) {
+        InputStreamResource resource = attachmentService.downloadAttachment(url);
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_OCTET_STREAM)
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + url + "\"")
-                .body(data);
+                .body(resource);
     }
 }

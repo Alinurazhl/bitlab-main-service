@@ -7,6 +7,7 @@ import io.minio.PutObjectArgs;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.InputStreamResource;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -49,17 +50,17 @@ public class FileServiceImpl implements FileService {
     }
 
     @Override
-    public byte[] downloadFile(String fileName) {
-        log.info("Downloading file {} from MinIO bucket {}", fileName, bucketName);
-        try (InputStream stream = minioClient.getObject(
-                GetObjectArgs.builder()
-                        .bucket(bucketName)
-                        .object(fileName)
-                        .build())) {
-            return stream.readAllBytes();
+    public InputStreamResource downloadFileStream(String fileName) {
+        try {
+            InputStream stream = minioClient.getObject(GetObjectArgs.builder()
+                    .bucket(bucketName)
+                    .object(fileName)
+                    .build());
+            return new InputStreamResource(stream);
         } catch (Exception e) {
-            log.error("Failed to download file from MinIO: {}", e.getMessage());
-            throw new RuntimeException("Файл не найден или недоступен");
+            log.error("Error downloading file stream from MinIO: {}", fileName, e);
+            throw new RuntimeException("Ошибка при скачивании файла из хранилища", e);
         }
     }
+
 }
